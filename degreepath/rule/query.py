@@ -58,12 +58,15 @@ class QueryRule(Rule, BaseQueryRule):
         given_keys = set(data.keys())
         assert given_keys.difference(allowed_keys) == set(), f"expected set {given_keys.difference(allowed_keys)} to be empty (at {path})"
 
+        source = QuerySource(data['from'])
+        allow_claimed = data.get('allow_claimed', False) or source is QuerySource.Claimed
+
         return QueryRule(
-            source=QuerySource(data['from']),
+            source=source,
             assertions=tuple(assertions),
             limit=limit,
             where=where,
-            allow_claimed=data.get('allow_claimed', False),
+            allow_claimed=allow_claimed,
             attempt_claims=data.get('claim', True),
             load_potentials=data.get('load_potentials', True),
             path=tuple(path),
@@ -81,6 +84,9 @@ class QueryRule(Rule, BaseQueryRule):
     def get_data(self, *, ctx: 'RequirementContext') -> Sequence[Clausable]:
         if self.source is QuerySource.Courses:
             return ctx.transcript()
+
+        if self.source is QuerySource.Claimed:
+            return []
 
         elif self.source is QuerySource.Areas:
             return list(ctx.areas)
@@ -138,6 +144,9 @@ class QueryRule(Rule, BaseQueryRule):
 
     def _has_potential(self, *, ctx: 'RequirementContext') -> bool:
         if ctx.has_exception(self.path):
+            return True
+
+        if self.source is QuerySource.Claimed:
             return True
 
         if has_assertion(self.assertions, key=get_lt_clauses):

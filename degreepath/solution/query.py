@@ -61,7 +61,12 @@ class QuerySolution(Solution, BaseQueryRule):
         failed_claims: List['ClaimAttempt'] = []
 
         output: Sequence[Clausable] = self.output
-        if self.source is QuerySource.Courses:
+        if self.source is QuerySource.Claimed:
+            output = ctx.transcript_of_claimed()
+            if self.where:
+                output = [item for item in output if self.where.apply(item)]
+
+        if self.source in (QuerySource.Courses, QuerySource.Claimed):
             for course in cast(Sequence[CourseInstance], output):
                 if self.attempt_claims:
                     claim = ctx.make_claim(course=course, path=self.path, allow_claimed=self.allow_claimed)

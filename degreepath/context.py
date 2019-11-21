@@ -57,6 +57,9 @@ class RequirementContext:
     def transcript(self) -> List[CourseInstance]:
         return self.transcript_
 
+    def transcript_of_claimed(self) -> List[CourseInstance]:
+        return sorted((self.clbid_lookup_map_[clbid] for clbid in self.claims.keys()), key=lambda c: c.sort_order())
+
     def transcript_with_excluded(self) -> List[CourseInstance]:
         return self.transcript_with_excluded_
 

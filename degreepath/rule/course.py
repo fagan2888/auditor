@@ -10,7 +10,7 @@ from ..data.course_enums import GradeOption
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..context import RequirementContext
-    from ..data import Clausable  # noqa: F401
+    from ..data import Clausable, CourseInstance  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ class CourseRule(Rule, BaseCourseRule):
         except StopIteration:
             return False
 
-    def all_matches(self, *, ctx: 'RequirementContext') -> Collection['Clausable']:
+    def all_matches(self, *, ctx: 'RequirementContext') -> Collection['CourseInstance']:
         for insert in ctx.get_insert_exceptions(self.path):
             match = ctx.find_course_by_clbid(insert.clbid)
             return [match] if match else []

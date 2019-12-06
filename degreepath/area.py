@@ -1,5 +1,5 @@
 import attr
-from typing import Dict, List, Set, Tuple, Optional, Sequence, Iterator, Iterable, Any, TYPE_CHECKING
+from typing import Dict, List, Set, Tuple, Optional, Sequence, Iterator, Iterable, Any, Union, cast, TYPE_CHECKING
 import logging
 import decimal
 
@@ -32,7 +32,7 @@ class AreaOfStudy(Base):
     code: str
 
     limit: LimitSet
-    result: Any  # Rule
+    result: Union[Rule, Result]
     multicountable: Dict[str, List[Tuple[str, ...]]]
     path: Tuple[str, ...]
 
@@ -135,7 +135,7 @@ class AreaOfStudy(Base):
     def validate(self) -> None:
         ctx = RequirementContext()
 
-        self.result.validate(ctx=ctx)
+        cast(Rule, self.result).validate(ctx=ctx)
 
     def solutions(
         self, *,
@@ -164,7 +164,7 @@ class AreaOfStudy(Base):
                 multicountable=self.multicountable,
             ).with_transcript(limited_transcript, full=transcript, forced=forced_courses, including_failed=transcript_with_failed)
 
-            for sol in self.result.solutions(ctx=ctx, depth=1):
+            for sol in cast(Rule, self.result).solutions(ctx=ctx, depth=1):
                 ctx.reset_claims()
                 yield AreaSolution.from_area(solution=sol, area=self, ctx=ctx)
 
@@ -293,6 +293,15 @@ class AreaResult(AreaOfStudy, Result):
             return True
 
         return self.result.ok()
+
+    def complete_after_current_term(self) -> bool:
+        return self.result.complete_after_current_term()
+
+    def complete_after_registered(self) -> bool:
+        return self.result.complete_after_registered()
+
+    def partially_complete(self) -> bool:
+        return self.result.partially_complete()
 
     def rank(self) -> Summable:
         return self.result.rank()

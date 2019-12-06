@@ -53,7 +53,7 @@ class BaseCourseRule(Base):
         return any(c.is_future_reg for c in self.matched()) or self.complete_after_current_term()
 
     def complete_after_current_term(self) -> bool:
-        return any(c.is_current for c in self.matched())
+        return any(c.is_current for c in self.matched()) or self.ok()
 
     def max_rank(self) -> int:
         return 1

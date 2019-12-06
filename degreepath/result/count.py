@@ -45,7 +45,7 @@ class CountResult(Result, BaseCountRule):
         return sum(1 if r.complete_after_current_term() else 0 for r in self.items) >= self.count
 
     def complete_after_registered(self) -> bool:
-        return sum(1 if r.complete_after_registered() else 0 for r in self.items) >= self.count
+        return sum(1 if r.complete_after_registered() else 0 for r in self.items) >= self.count or self.complete_after_current_term()
 
     def partially_complete(self) -> bool:
-        return sum(1 if r.partially_complete() else 0 for r in self.items) >= self.count
+        return sum(1 if r.partially_complete() else 0 for r in self.items) >= self.count or self.complete_after_registered()

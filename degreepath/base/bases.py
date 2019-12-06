@@ -68,11 +68,11 @@ class Base(abc.ABC):
     def partially_complete(self) -> bool:
         return 0 < self.rank() < self.max_rank()
 
-    def complete_after_current_term(self) -> bool:
-        return False
-
     def complete_after_registered(self) -> bool:
-        return False
+        return self.partially_complete()
+
+    def complete_after_current_term(self) -> bool:
+        return self.complete_after_registered()
 
     def rank(self) -> Summable:
         return 0

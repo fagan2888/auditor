@@ -9,6 +9,7 @@ from .exception import RuleException
 from .area import AreaOfStudy, AreaResult
 from .ms import pretty_ms
 from .data import CourseInstance, AreaPointer, MusicAttendance, MusicPerformance, MusicProficiencies
+from .status import ResultStatus
 
 
 @attr.s(slots=True, kw_only=True, auto_attribs=True)
@@ -149,7 +150,7 @@ def audit(
         elif result_rank > best_rank:
             best_sol, best_rank = result, result_rank
 
-        if result.ok():
+        if result.status() in (ResultStatus.Pass, ResultStatus.PendingCurrent, ResultStatus.PendingRegistered):
             best_sol, best_rank = result, result_rank
             iter_end = time.perf_counter()
             iterations.append(iter_end - iter_start)

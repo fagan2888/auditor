@@ -65,6 +65,7 @@ class QuerySolution(Solution, BaseQueryRule):
 
         audit_mode: Dict[QuerySource, Callable[['RequirementContext'], AuditResult]] = {
             QuerySource.Courses: self.audit_courses,
+            QuerySource.ClaimedCourses: self.audit_courses,
             QuerySource.Areas: self.audit_areas,
             QuerySource.MusicPerformances: self.audit_music_performances,
             QuerySource.MusicAttendances: self.audit_music_attendances,
@@ -98,6 +99,10 @@ class QuerySolution(Solution, BaseQueryRule):
         failed_claims: List['ClaimAttempt'] = []
 
         output: Sequence[Clausable] = self.output
+
+        if self.source is QuerySource.ClaimedCourses:
+            output = [item for item in ctx.claimed_transcript() if self.where.apply(item)]
+
         if self.attempt_claims:
             for course in cast(Sequence[CourseInstance], output):
                 claim = ctx.make_claim(course=course, path=self.path, allow_claimed=self.allow_claimed)

@@ -37,11 +37,16 @@ class QueryRule(Rule, BaseQueryRule):
     def load(data: Dict, *, c: Constants, path: List[str], ctx: Optional['RequirementContext'] = None) -> 'QueryRule':
         path = [*path, f".query"]
 
+        source = QuerySource(data['from'])
+
         where = data.get("where", None)
         if where is not None:
             where = load_clause(where, c=c, ctx=ctx)
 
         limit = LimitSet.load(data=data.get("limit", None), c=c)
+
+        if source is QuerySource.ClaimedCourses:
+            assert not limit.has_limits(), 'limits cannot be applied to a from:claimed query rule at this time'
 
         if 'limits' in data:
             raise ValueError(f'the key is "limit", not "limits": {data}')
@@ -63,12 +68,16 @@ class QueryRule(Rule, BaseQueryRule):
         given_keys = set(data.keys())
         assert given_keys.difference(allowed_keys) == set(), f"expected set {given_keys.difference(allowed_keys)} to be empty (at {path})"
 
+        allow_claimed = data.get('allow_claimed', False)
+        if source is QuerySource.ClaimedCourses:
+            allow_claimed = True
+
         return QueryRule(
-            source=QuerySource(data['from']),
+            source=source,
             assertions=tuple(assertions),
             limit=limit,
             where=where,
-            allow_claimed=data.get('allow_claimed', False),
+            allow_claimed=allow_claimed,
             attempt_claims=data.get('claim', True),
             load_potentials=data.get('load_potentials', True),
             path=tuple(path),
@@ -95,6 +104,9 @@ class QueryRule(Rule, BaseQueryRule):
         if self.source is QuerySource.Courses:
             all_courses = ctx.transcript()
             return [c for c in all_courses if c.clbid not in self.excluded_clbids]
+
+        if self.source is QuerySource.ClaimedCourses:
+            return []
 
         elif self.source is QuerySource.Areas:
             return list(ctx.areas)
@@ -155,6 +167,9 @@ class QueryRule(Rule, BaseQueryRule):
             return False
 
     def _has_potential(self, *, ctx: 'RequirementContext') -> bool:
+        if self.source is QuerySource.ClaimedCourses:
+            return True
+
         if ctx.has_exception(self.path):
             return True
 

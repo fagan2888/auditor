@@ -10,6 +10,7 @@ from ..constants import Constants
 from ..solution.count import CountSolution
 from ..ncr import mult
 from ..solve import find_best_solution
+from ..clause import ClauseMode
 from .assertion import AssertionRule
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -109,11 +110,11 @@ class CountRule(Rule, BaseCountRule):
         if audit_clause is not None:
             if 'all' in audit_clause:
                 audit_clauses = tuple(
-                    AssertionRule.load(audit, c=c, path=[*path, ".audit", f"[{i}]"])
+                    AssertionRule.load(audit, c=c, path=[*path, ".audit", f"[{i}]"], mode=ClauseMode.Course)
                     for i, audit in enumerate(audit_clause['all'])
                 )
             else:
-                audit_clauses = tuple([AssertionRule.load(audit_clause, c=c, path=[*path, ".audit", "[0]"])])
+                audit_clauses = tuple([AssertionRule.load(audit_clause, c=c, path=[*path, ".audit", "[0]"], mode=ClauseMode.Course)])
 
         loaded_items = tuple(r for r in (
             load_rule(data=r, c=c, children=children_with_emphases, path=[*path, f"[{i}]"], ctx=ctx)

@@ -68,3 +68,21 @@ class BaseRequirementRule(Base):
             return self.result.claims_for_gpa()
 
         return []
+
+    def complete_after_current_term(self) -> bool:
+        if self.result is None:
+            return False
+
+        return self.result.complete_after_current_term()
+
+    def complete_after_registered(self) -> bool:
+        if self.result is None:
+            return False
+
+        return self.result.complete_after_registered()
+
+    def partially_complete(self) -> bool:
+        if self.result is None:
+            return False
+
+        return self.result.partially_complete()

@@ -4,6 +4,8 @@ import enum
 @enum.unique
 class ResultStatus(enum.Enum):
     Pass = "pass"
-    InProgress = "in-progress"
+    Partial = "partial"
+    PendingCurrent = "pending-current"
+    PendingRegistered = "pending-registered"
     Problem = "problem"
-    Pending = "pending"
+    NotStarted = "not-started"

@@ -50,7 +50,7 @@ class CourseSolution(Solution, BaseCourseRule):
 
         # don't forget to update the callsite in rule.course#all_matches when updating this
         for matched_course in ctx.find_courses(course=self.course, ap=self.ap, institution=self.institution, name=self.name, clbid=self.clbid):
-            if self.grade is not None and matched_course.is_in_progress is False and matched_course.grade_points < self.grade:
+            if self.grade is not None and matched_course.is_completed and matched_course.grade_points < self.grade:
                 logger.debug('%s course "%s" exists, but the grade of %s is below the allowed minimum grade of %s', self.path, self.identifier(), matched_course.grade_points, self.grade)
                 continue
 

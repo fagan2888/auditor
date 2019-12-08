@@ -119,6 +119,7 @@ class GradeCode(OrderedEnum):
     _AB = "AB"
     _NG = "NG"
     _IP = "IP"
+    _RG = "RG"
     _I = "I"
     _P = "P"
     _N = "N"

@@ -18,10 +18,14 @@ class AppliedClauseResult:
     courses: Collection[CourseInstance] = tuple()
 
     def clbids(self) -> Tuple[str, ...]:
-        return tuple(c.clbid for c in self.courses)
+        courses = sorted(self.courses, key=lambda c: c.sort_order())
+        return tuple(c.clbid for c in courses)
 
     def ip_clbids(self) -> Tuple[str, ...]:
-        return tuple(c.clbid for c in self.courses if c.is_in_progress)
+        return tuple(sorted(c.clbid for c in self.courses if c.is_current))
+
+    def future_clbids(self) -> Tuple[str, ...]:
+        return tuple(sorted(c.clbid for c in self.courses if c.is_future_reg))
 
 
 def count_items_test(data: Sequence[Any]) -> AppliedClauseResult:
@@ -185,7 +189,7 @@ def sum_credits_from_single_subject(data: Sequence[CourseInstance]) -> AppliedCl
     items = tuple(sorted(c.credits for c in data if best_subject == c.subject))
     courses = tuple(c for c in data if best_subject == c.subject)
 
-    return AppliedClauseResult(value=sum(items), data=items, courses=tuple(courses))
+    return AppliedClauseResult(value=sum(items), data=items, courses=courses)
 
 
 def average_grades(data: Sequence[CourseInstance]) -> AppliedClauseResult:
@@ -250,6 +254,9 @@ def apply_clause_to_assertion(clause: 'SingleClause', value: Sequence[Clausable]
 
 
 def apply_clause_to_assertion_with_courses(clause: 'SingleClause', value: Sequence[CourseInstance]) -> AppliedClauseResult:
+    if not value:
+        return AppliedClauseResult(value=0, data=tuple(), courses=tuple())
+
     action = course_actions.get(clause.key, None)
 
     if action is None:
@@ -259,6 +266,9 @@ def apply_clause_to_assertion_with_courses(clause: 'SingleClause', value: Sequen
 
 
 def apply_clause_to_assertion_with_areas(clause: 'SingleClause', value: Sequence[AreaPointer]) -> AppliedClauseResult:
+    if not value:
+        return AppliedClauseResult(value=0, data=tuple(), courses=tuple())
+
     action = area_actions.get(clause.key, None)
 
     if action is None:
@@ -268,6 +278,9 @@ def apply_clause_to_assertion_with_areas(clause: 'SingleClause', value: Sequence
 
 
 def apply_clause_to_assertion_with_data(clause: 'SingleClause', value: Sequence[Any]) -> AppliedClauseResult:
+    if not value:
+        return AppliedClauseResult(value=0, data=tuple(), courses=tuple())
+
     action = other_actions.get(clause.key, None)
 
     if action is None:

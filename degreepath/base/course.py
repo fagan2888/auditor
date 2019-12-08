@@ -38,7 +38,7 @@ class BaseCourseRule(Base):
         return "course"
 
     def rank(self) -> Decimal:
-        if self.in_progress():
+        if self.partially_complete():
             return Decimal('0.5')
 
         if self.ok():
@@ -46,8 +46,14 @@ class BaseCourseRule(Base):
 
         return Decimal('0')
 
-    def in_progress(self) -> bool:
-        return any(c.is_in_progress for c in self.matched())
+    def partially_complete(self) -> bool:
+        return any(c.is_current or c.is_future_reg for c in self.matched()) or self.complete_after_registered()
+
+    def complete_after_registered(self) -> bool:
+        return any(c.is_future_reg for c in self.matched()) or self.complete_after_current_term()
+
+    def complete_after_current_term(self) -> bool:
+        return any(c.is_current for c in self.matched())
 
     def max_rank(self) -> int:
         return 1

@@ -1,7 +1,7 @@
 from typing import Dict, Sequence, Optional, Any, Mapping, Iterator, TYPE_CHECKING
 from .constants import Constants
 
-from .clause import Clause, AndClause, OrClause, SingleClause
+from .clause import Clause, AndClause, OrClause, SingleClause, ClauseMode
 from .operator import Operator
 from .solve import find_best_solution
 
@@ -16,6 +16,7 @@ def load_clause(
     ctx: Optional['RequirementContext'] = None,
     allow_boolean: bool = True,
     forbid: Sequence[Operator] = tuple(),
+    mode: ClauseMode,
 ) -> Optional[Clause]:
     if not isinstance(data, Mapping):
         raise Exception(f'expected {data} to be a dictionary')
@@ -25,15 +26,15 @@ def load_clause(
 
     if "$and" in data:
         assert len(data.keys()) == 1
-        clauses = tuple(load_clauses(data['$and'], c=c, ctx=ctx, allow_boolean=allow_boolean, forbid=forbid))
+        clauses = tuple(load_clauses(data['$and'], c=c, mode=mode, ctx=ctx, allow_boolean=allow_boolean, forbid=forbid))
         assert len(clauses) >= 1
-        return AndClause(children=clauses)
+        return AndClause(children=clauses, mode=mode)
 
     elif "$or" in data:
         assert len(data.keys()) == 1
-        clauses = tuple(load_clauses(data['$or'], c=c, ctx=ctx, allow_boolean=allow_boolean, forbid=forbid))
+        clauses = tuple(load_clauses(data['$or'], c=c, mode=mode, ctx=ctx, allow_boolean=allow_boolean, forbid=forbid))
         assert len(clauses) >= 1
-        return OrClause(children=clauses)
+        return OrClause(children=clauses, mode=mode)
 
     elif "$if" in data:
         assert ctx, '$if clauses are not allowed here'
@@ -44,8 +45,8 @@ def load_clause(
         with ctx.fresh_claims():
             s = find_best_solution(rule=rule, ctx=ctx)
 
-        when_yes = load_clause(data['$then'], c=c, ctx=ctx, allow_boolean=allow_boolean, forbid=forbid)
-        when_no = load_clause(data['$else'], c=c, ctx=ctx, allow_boolean=allow_boolean, forbid=forbid) if '$else' in data else None
+        when_yes = load_clause(data['$then'], mode=mode, c=c, ctx=ctx, allow_boolean=allow_boolean, forbid=forbid)
+        when_no = load_clause(data['$else'], mode=mode, c=c, ctx=ctx, allow_boolean=allow_boolean, forbid=forbid) if '$else' in data else None
 
         if not s:
             return when_no
@@ -57,12 +58,12 @@ def load_clause(
 
     assert len(data.keys()) == 1, "only one key allowed in single-clauses"
 
-    clauses = tuple(SingleClause.load(key, value, c, forbid) for key, value in data.items())
+    clauses = tuple(SingleClause.load(key, value, mode=mode, c=c, forbid=forbid) for key, value in data.items())
 
     if len(clauses) == 1:
         return clauses[0]
 
-    return AndClause(children=clauses)
+    return AndClause(children=clauses, mode=mode)
 
 
 def load_clauses(
@@ -72,9 +73,10 @@ def load_clauses(
     ctx: Optional['RequirementContext'] = None,
     allow_boolean: bool = True,
     forbid: Sequence[Operator] = tuple(),
+    mode: ClauseMode,
 ) -> Iterator[Clause]:
     for clause in data:
-        loaded = load_clause(clause, c=c, allow_boolean=allow_boolean, forbid=forbid, ctx=ctx)
+        loaded = load_clause(clause, c=c, allow_boolean=allow_boolean, forbid=forbid, ctx=ctx, mode=mode)
         if not loaded:
             continue
         yield loaded

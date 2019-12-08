@@ -27,7 +27,9 @@ class CourseInstance(Clausable):
     grade_points: Decimal
     institution: str
     is_in_gpa: bool
-    is_in_progress: bool
+    is_current: bool
+    is_future_reg: bool
+    is_completed: bool
     is_incomplete: bool
     is_repeat: bool
     is_stolaf: bool
@@ -69,7 +71,6 @@ class CourseInstance(Clausable):
             "grade_points": str(self.grade_points),
             "institution": self.institution,
             "is_in_gpa": self.is_in_gpa,
-            "is_in_progress": self.is_in_progress,
             "is_incomplete": self.is_incomplete,
             "is_repeat": self.is_repeat,
             "is_stolaf": self.is_stolaf,
@@ -203,8 +204,8 @@ def apply_single_clause__is_in_gpa(course: CourseInstance, clause: 'SingleClause
     return clause.compare(course.is_in_gpa)
 
 
-def apply_single_clause__is_in_progress(course: CourseInstance, clause: 'SingleClause') -> bool:
-    return clause.compare(course.is_in_progress)
+def apply_single_clause__is_current(course: CourseInstance, clause: 'SingleClause') -> bool:
+    return clause.compare(course.is_current or course.is_future_reg)
 
 
 def apply_single_clause__year(course: CourseInstance, clause: 'SingleClause') -> bool:
@@ -237,7 +238,7 @@ clause_application_lookup: Dict[str, Callable[[CourseInstance, 'SingleClause'], 
     'grade_option': apply_single_clause__grade_option,
     'institution': apply_single_clause__institution,
     'is_in_gpa': apply_single_clause__is_in_gpa,
-    'is_in_progress': apply_single_clause__is_in_progress,
+    'is_in_progress': apply_single_clause__is_current,
     'is_stolaf': apply_single_clause__is_stolaf,
     'lab': apply_single_clause__lab,
     'level': apply_single_clause__level,
@@ -261,6 +262,7 @@ def load_course(data: Dict[str, Any]) -> CourseInstance:  # noqa: C901
     flag_gpa = data['flag_gpa']
     flag_incomplete = data['flag_incomplete']
     flag_in_progress = data['flag_in_progress']
+    flag_future = data.get('flag_future', False)
     flag_repeat = data['flag_repeat']
     flag_stolaf = data['flag_stolaf']
     gereqs = data['gereqs']
@@ -277,6 +279,11 @@ def load_course(data: Dict[str, Any]) -> CourseInstance:  # noqa: C901
     term = data['term']
     transcript_code = data['transcript_code']
     year = data['year']
+
+    # TEMP
+    if int(year) == 2019 and int(term) > 1:
+        flag_future = True
+        grade_code = GradeCode._RG
 
     clbid = clbid
     term = int(term)
@@ -334,7 +341,9 @@ def load_course(data: Dict[str, Any]) -> CourseInstance:  # noqa: C901
         grade_points=grade_points,
         institution=institution,
         is_in_gpa=flag_gpa,
-        is_in_progress=flag_in_progress,
+        is_current=flag_in_progress and not flag_future,
+        is_future_reg=flag_future,
+        is_completed=not flag_in_progress and not flag_future,
         is_incomplete=flag_incomplete,
         is_repeat=flag_repeat,
         is_stolaf=flag_stolaf,
@@ -368,7 +377,8 @@ def course_from_str(s: str, **kwargs: Any) -> CourseInstance:
         "credits": '1.00',
         "crsid": f"<crsid={str(hash(s))}>",
         "flag_gpa": True,
-        "flag_in_progress": False,
+        "flag_current": False,
+        "flag_future": False,
         "flag_incomplete": False,
         "flag_repeat": False,
         "flag_stolaf": True,

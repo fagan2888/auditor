@@ -40,3 +40,12 @@ class CountResult(Result, BaseCountRule):
         passed_count = sum(1 if r.ok() else 0 for r in self.items)
         audit_passed = len(self.audit_results) == 0 or all(a.ok() for a in self.audit_results)
         return passed_count >= self.count and audit_passed
+
+    def complete_after_current_term(self) -> bool:
+        return sum(1 if r.complete_after_current_term() else 0 for r in self.items) >= self.count
+
+    def complete_after_registered(self) -> bool:
+        return sum(1 if r.complete_after_registered() else 0 for r in self.items) >= self.count
+
+    def partially_complete(self) -> bool:
+        return sum(1 if r.partially_complete() else 0 for r in self.items) >= self.count

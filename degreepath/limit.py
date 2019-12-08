@@ -4,7 +4,7 @@ import itertools
 from collections import defaultdict
 import logging
 
-from .clause import Clause, str_clause
+from .clause import Clause, ClauseMode, str_clause
 from .load_clause import load_clause
 from .constants import Constants
 
@@ -39,7 +39,7 @@ class Limit:
         given_keys = set(data.keys())
         assert given_keys.difference(allowed_keys) == set(), f"expected set {given_keys.difference(allowed_keys)} to be empty"
 
-        clause = load_clause(data["where"], c=c)
+        clause = load_clause(data["where"], c=c, mode=ClauseMode.Course)
         assert clause, 'limits are not allowed to have conditional clauses'
 
         return Limit(at_most=at_most, where=clause, message=data.get('message', None))

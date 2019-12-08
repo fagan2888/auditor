@@ -24,7 +24,7 @@ class BaseProficiencyRule(Base):
         return "proficiency"
 
     def rank(self) -> Decimal:
-        if self.in_progress():
+        if self.partially_complete() or self.complete_after_current_term() or self.complete_after_registered():
             return Decimal('0.5')
 
         if self.ok():
@@ -32,8 +32,14 @@ class BaseProficiencyRule(Base):
 
         return Decimal('0')
 
-    def in_progress(self) -> bool:
-        return self.course.in_progress() if self.course else False
+    def partially_complete(self) -> bool:
+        return self.course.partially_complete() if self.course else False
+
+    def complete_after_registered(self) -> bool:
+        return self.course.complete_after_registered() if self.course else False
+
+    def complete_after_current_term(self) -> bool:
+        return self.course.complete_after_current_term() if self.course else False
 
     def max_rank(self) -> int:
         return 1

@@ -45,13 +45,19 @@ class Base(abc.ABC):
         return RuleState.Rule
 
     def status(self) -> ResultStatus:
-        if self.in_progress():
-            return ResultStatus.InProgress
-
         if self.ok():
             return ResultStatus.Pass
 
-        return ResultStatus.Pending
+        if self.complete_after_current_term():
+            return ResultStatus.PendingCurrent
+
+        if self.complete_after_registered():
+            return ResultStatus.PendingRegistered
+
+        if self.partially_complete():
+            return ResultStatus.Partial
+
+        return ResultStatus.NotStarted
 
     def ok(self) -> bool:
         if self.was_overridden():
@@ -59,8 +65,14 @@ class Base(abc.ABC):
 
         return False
 
-    def in_progress(self) -> bool:
-        return 0 < self.rank() < self.max_rank() or any(c.is_in_progress for c in self.matched())
+    def partially_complete(self) -> bool:
+        return 0 < self.rank() < self.max_rank()
+
+    def complete_after_current_term(self) -> bool:
+        return False
+
+    def complete_after_registered(self) -> bool:
+        return False
 
     def rank(self) -> Summable:
         return 0

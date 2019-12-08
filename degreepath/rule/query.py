@@ -7,7 +7,7 @@ import decimal
 from ..base import Rule, BaseQueryRule
 from ..base.query import QuerySource
 from ..limit import LimitSet
-from ..clause import Clause, SingleClause, OrClause, AndClause
+from ..clause import Clause, SingleClause, OrClause, AndClause, ClauseMode
 from ..load_clause import load_clause
 from ..data.clausable import Clausable
 from ..solution.query import QuerySolution
@@ -36,9 +36,17 @@ class QueryRule(Rule, BaseQueryRule):
     def load(data: Dict, *, c: Constants, path: List[str], ctx: Optional['RequirementContext'] = None) -> 'QueryRule':
         path = [*path, f".query"]
 
+        source = QuerySource(data['from'])
+
+        clause_mode = ClauseMode.Other
+        if source is QuerySource.Courses:
+            clause_mode = ClauseMode.Course
+        elif source is QuerySource.Areas:
+            clause_mode = ClauseMode.Area
+
         where = data.get("where", None)
         if where is not None:
-            where = load_clause(where, c=c, ctx=ctx)
+            where = load_clause(where, c=c, ctx=ctx, mode=clause_mode)
 
         limit = LimitSet.load(data=data.get("limit", None), c=c)
 
@@ -47,9 +55,9 @@ class QueryRule(Rule, BaseQueryRule):
 
         assertions: List[Union[AssertionRule, ConditionalAssertionRule]]
         if "assert" in data:
-            assertions = [AssertionRule.load({'assert': data["assert"]}, c=c, path=[*path, ".assertions", "[0]"])]
+            assertions = [AssertionRule.load({'assert': data["assert"]}, c=c, path=[*path, ".assertions", "[0]"], mode=clause_mode)]
         elif "all" in data:
-            assertions = [ConditionalAssertionRule.load(d, c=c, path=[*path, ".assertions", f"[{i}]"]) for i, d in enumerate(data["all"])]
+            assertions = [ConditionalAssertionRule.load(d, c=c, path=[*path, ".assertions", f"[{i}]"], mode=clause_mode) for i, d in enumerate(data["all"])]
         else:
             raise ValueError(f'you must have either an assert: or an all: key in {data}')
 
@@ -61,7 +69,7 @@ class QueryRule(Rule, BaseQueryRule):
         assert given_keys.difference(allowed_keys) == set(), f"expected set {given_keys.difference(allowed_keys)} to be empty (at {path})"
 
         return QueryRule(
-            source=QuerySource(data['from']),
+            source=source,
             assertions=tuple(assertions),
             limit=limit,
             where=where,
@@ -120,8 +128,11 @@ class QueryRule(Rule, BaseQueryRule):
 
                 # If we want to make things go green sooner, turn this on
                 if self.source is QuerySource.Courses:
-                    only_completed = tuple(c for c in item_set if isinstance(c, CourseInstance) and c.is_in_progress is False)
+                    only_completed = tuple(c for c in item_set if isinstance(c, CourseInstance) and c.is_completed)
                     yield QuerySolution.from_rule(rule=self, output=only_completed)
+
+                    only_current = tuple(c for c in item_set if isinstance(c, CourseInstance) and c.is_current)
+                    yield QuerySolution.from_rule(rule=self, output=only_current)
 
                 yield QuerySolution.from_rule(rule=self, output=item_set)
                 continue

@@ -56,14 +56,26 @@ class BaseQueryRule(Base):
     def max_rank(self) -> Summable:
         return sum(a.max_rank() for a in self.assertions)
 
-    def in_progress(self) -> bool:
+    def partially_complete(self) -> bool:
         if 0 < self.rank() < self.max_rank():
             return True
 
-        if any(c.is_in_progress for c in self.matched()):
+        if any(c.is_future_reg for c in self.matched()):
             return True
 
-        if any(c.in_progress() for c in self.all_assertions()):
+        if any(c.partially_complete() for c in self.all_assertions()):
+            return True
+
+        if self.complete_after_current_term():
+            return True
+
+        if self.complete_after_registered():
             return True
 
         return False
+
+    def complete_after_current_term(self) -> bool:
+        return all(c.complete_after_current_term() for c in self.all_assertions())
+
+    def complete_after_registered(self) -> bool:
+        return all(c.complete_after_registered() for c in self.all_assertions())

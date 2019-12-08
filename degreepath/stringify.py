@@ -1,5 +1,5 @@
 from typing import List, Iterator, Any, Dict, Sequence
-from .clause import str_clause, get_resolved_items, get_resolved_clbids, get_in_progress_clbids
+from .clause import str_clause, get_resolved_items, get_resolved_clbids, get_in_progress_clbids, get_future_clbids
 from .data import CourseInstance
 from .data.course_enums import CourseType
 from .ms import pretty_ms
@@ -25,6 +25,15 @@ def summarize(
     word = "attempt" if count == 1 else "attempts"
     yield f"{count:,} {word} in {elapsed} (avg {avg_iter_time} per attempt)"
     yield endl
+    yield endl
+
+    yield "💜 = overridden" + endl
+    yield "💚 = ok" + endl
+    yield "🅿️  = partial" + endl
+    yield "🧡 = done after this term" + endl
+    yield "💝 = done after registered courses" + endl
+    yield "💤 = not started" + endl
+    yield "🚫️ = problem" + endl
     yield endl
 
     yield endl.join(print_result(result, transcript=mapped_transcript, show_paths=show_paths, show_ranks=show_ranks))
@@ -94,10 +103,14 @@ def calculate_emoji(rule: Dict[str, Any]) -> str:
         return "💜"
     elif rule["status"] == "pass":
         return "💚"
-    elif rule["status"] == "pending":
-        return "🌀"
-    elif rule["status"] == "in-progress":
-        return "💛"
+    elif rule["status"] == "not-started":
+        return "💤"
+    elif rule["status"] == "partial":
+        return "🅿️ "
+    elif rule["status"] == "pending-current":
+        return "🧡"
+    elif rule["status"] == "pending-registered":
+        return "💝"
     else:
         return "🚫️"
 
@@ -147,7 +160,7 @@ def print_course(
     if not rule['course'] and rule['ap'] != '':
         display_course = rule['ap']
 
-    status = "🌀      "
+    status = "💤      "
     if rule["ok"]:
         if len(rule["claims"]):
             claim = rule["claims"][0]["claim"]
@@ -159,8 +172,10 @@ def print_course(
             if course is not None:
                 if course.is_incomplete:
                     status = "⛔️ [dnf]"
-                elif course.is_in_progress:
+                elif course.is_current:
                     status = "💙 [ ip]"
+                elif course.is_future_reg:
+                    status = "💙 [reg]"
                 elif course.is_repeat:
                     status = "💕 [rep]"
                 else:
@@ -198,7 +213,7 @@ def print_proficiency(
     if show_ranks:
         prefix += f"({rule['rank']}|{rule['max_rank']}|{'t' if rule['ok'] else 'f'}) "
 
-    status = "🌀      "
+    status = "💤      "
     if rule["ok"]:
         if rule["overridden"]:
             status = "💜 [wvd]"
@@ -375,13 +390,21 @@ def print_assertion(
         yield f"{prefix}resolved courses:"
 
         ip_clbids = get_in_progress_clbids(rule['assertion'])
+        future_clbids = get_future_clbids(rule['assertion'])
 
         for clbid in resolved_clbids:
             inserted_msg = " [ins]" if clbid in inserted or clbid in rule['inserted'] else ""
-            ip_msg = " [ip]" if clbid in ip_clbids else ""
+            ip_msg = " [ ip]" if clbid in ip_clbids else " [reg]" if clbid in future_clbids else ""
             if clbid in transcript:
                 course = transcript[clbid]
-                chunks = [x for x in [f'"{course.course()}"', f'name="{course.name}"', f'clbid={course.clbid}', key(course)] if x]
+                chunks = [x for x in [
+                    f'"{course.course()}"',
+                    f'name="{course.name}"',
+                    f'clbid={course.clbid}',
+                    f'term={course.year}-{course.term}',
+                    f'institution={course.institution}' if course.institution != 'STOLAF' else '',
+                    key(course),
+                ] if x]
                 yield f'{prefix}  -{ip_msg}{inserted_msg} Course({", ".join(chunks)})'
             else:
                 yield f'{prefix}  -{ip_msg}{inserted_msg} Course(clbid={clbid})'

@@ -1,8 +1,9 @@
 from collections.abc import Iterable
-from typing import Union, List, Set, Tuple, Dict, Any, Mapping, Callable, Optional, Iterator, Sequence, TYPE_CHECKING
+from typing import Union, List, Set, Tuple, Dict, Any, Mapping, Callable, Optional, Iterator, Sequence, cast, TYPE_CHECKING
 import logging
 from decimal import Decimal, InvalidOperation
 import abc
+import enum
 import attr
 
 from .constants import Constants
@@ -10,15 +11,21 @@ from .lib import str_to_grade_points
 from .operator import Operator, apply_operator, str_operator
 from .data.course_enums import GradeOption, GradeCode
 from .status import ResultStatus
-from .apply_clause import apply_clause_to_assertion
+from .apply_clause import apply_clause_to_assertion_with_courses, apply_clause_to_assertion_with_areas, apply_clause_to_assertion_with_data
 from functools import lru_cache
 
 if TYPE_CHECKING:  # pragma: no cover
     from .context import RequirementContext
-    from .data import Clausable  # noqa: F401
+    from .data import Clausable, CourseInstance, AreaPointer  # noqa: F401
 
 logger = logging.getLogger(__name__)
 CACHE_SIZE = 2048
+
+
+class ClauseMode(enum.Enum):
+    Course = enum.auto()
+    Area = enum.auto()
+    Other = enum.auto()
 
 
 @attr.s(auto_attribs=True, slots=True)
@@ -34,7 +41,8 @@ class BaseClause(abc.ABC):
 
 @attr.s(auto_attribs=True, slots=True)
 class ClauseWithResult:
-    result: ResultStatus = ResultStatus.Pending
+    mode: ClauseMode
+    result: ResultStatus = ResultStatus.NotStarted
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -58,22 +66,40 @@ class ClauseWithResult:
         return 1
 
     @lru_cache(CACHE_SIZE)
-    def in_progress(self) -> bool:
-        raise NotImplementedError(f'must define an in_progress() method')
+    @abc.abstractmethod
+    def partially_complete(self) -> bool:
+        raise NotImplementedError(f'must define a partially_complete() method')
 
     @lru_cache(CACHE_SIZE)
+    @abc.abstractmethod
+    def complete_after_current_term(self) -> bool:
+        raise NotImplementedError(f'must define a complete_after_current_term() method')
+
+    @lru_cache(CACHE_SIZE)
+    @abc.abstractmethod
+    def complete_after_registered(self) -> bool:
+        raise NotImplementedError(f'must define a complete_after_registered() method')
+
+    @lru_cache(CACHE_SIZE)
+    @abc.abstractmethod
     def ok(self) -> bool:
         raise NotImplementedError(f'must define an ok() method')
 
     @lru_cache(CACHE_SIZE)
     def status(self) -> ResultStatus:
-        if self.in_progress():
-            return ResultStatus.InProgress
-
         if self.ok():
             return ResultStatus.Pass
 
-        return ResultStatus.Pending
+        if self.complete_after_current_term():
+            return ResultStatus.PendingCurrent
+
+        if self.complete_after_registered():
+            return ResultStatus.PendingRegistered
+
+        if self.partially_complete():
+            return ResultStatus.Partial
+
+        return ResultStatus.NotStarted
 
 
 @attr.s(auto_attribs=True, slots=True)
@@ -82,6 +108,7 @@ class ResolvedClause(ClauseWithResult):
     resolved_items: Tuple[Any, ...] = tuple()
     resolved_clbids: Tuple[str, ...] = tuple()
     in_progress_clbids: Tuple[str, ...] = tuple()
+    future_clbids: Tuple[str, ...] = tuple()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -90,6 +117,7 @@ class ResolvedClause(ClauseWithResult):
             "resolved_items": [str(x) if isinstance(x, Decimal) else x for x in self.resolved_items],
             "resolved_clbids": [x for x in self.resolved_clbids],
             "in_progress_clbids": [x for x in self.in_progress_clbids],
+            "future_clbids": [x for x in self.future_clbids],
         }
 
 
@@ -117,28 +145,35 @@ class AndClause(BaseClause, ClauseWithResult):
     def compare_and_resolve_with(self, value: Tuple['Clausable', ...]) -> 'AndClause':  # type: ignore
         children = tuple(c.compare_and_resolve_with(value=value) for c in self.children)
 
-        if any(c.in_progress() for c in children):
-            # if there are any in-progress children
-            result = ResultStatus.InProgress
+        if all(c.complete_after_current_term() for c in children):
+            result = ResultStatus.PendingCurrent
+        elif all(c.complete_after_registered() for c in children):
+            result = ResultStatus.PendingRegistered
         elif all(c.ok() for c in children):
-            # if all children are OK
             result = ResultStatus.Pass
         elif any(c.ok() for c in children):
             # if the number of done items is not fully complete
-            result = ResultStatus.InProgress
+            result = ResultStatus.Partial
         else:
-            # otherwise
-            result = ResultStatus.Pending
+            result = ResultStatus.NotStarted
 
-        return AndClause(children=children, result=result)
+        return AndClause(children=children, result=result, mode=self.mode)
 
     @lru_cache(CACHE_SIZE)
     def ok(self) -> bool:
         return all(c.ok() for c in self.children)
 
     @lru_cache(CACHE_SIZE)
-    def in_progress(self) -> bool:
-        return any(c.in_progress() for c in self.children)
+    def partially_complete(self) -> bool:
+        return any(c.partially_complete() for c in self.children)
+
+    @lru_cache(CACHE_SIZE)
+    def complete_after_current_term(self) -> bool:
+        return all(c.complete_after_current_term() for c in self.children)
+
+    @lru_cache(CACHE_SIZE)
+    def complete_after_registered(self) -> bool:
+        return all(c.complete_after_registered() for c in self.children)
 
     @lru_cache(CACHE_SIZE)
     def rank(self) -> Union[int, Decimal]:
@@ -176,25 +211,35 @@ class OrClause(BaseClause, ClauseWithResult):
     def compare_and_resolve_with(self, value: Tuple['Clausable', ...]) -> 'OrClause':  # type: ignore
         children = tuple(c.compare_and_resolve_with(value=value) for c in self.children)
 
-        if any(c.in_progress() for c in children):
-            # if there are any in-progress children
-            result = ResultStatus.InProgress
+        if any(c.complete_after_current_term() for c in children):
+            result = ResultStatus.PendingCurrent
+        elif any(c.complete_after_registered() for c in children):
+            result = ResultStatus.PendingRegistered
+        elif any(c.partially_complete() for c in children):
+            result = ResultStatus.Partial
         elif any(c.ok() for c in children):
-            # if any children are OK
             result = ResultStatus.Pass
         else:
             # otherwise
-            result = ResultStatus.Pending
+            result = ResultStatus.NotStarted
 
-        return OrClause(children=children, result=result)
+        return OrClause(children=children, result=result, mode=self.mode)
 
     @lru_cache(CACHE_SIZE)
     def ok(self) -> bool:
         return any(c.ok() for c in self.children)
 
     @lru_cache(CACHE_SIZE)
-    def in_progress(self) -> bool:
-        return any(c.in_progress() for c in self.children)
+    def partially_complete(self) -> bool:
+        return any(c.partially_complete() for c in self.children)
+
+    @lru_cache(CACHE_SIZE)
+    def complete_after_current_term(self) -> bool:
+        return any(c.complete_after_current_term() for c in self.children)
+
+    @lru_cache(CACHE_SIZE)
+    def complete_after_registered(self) -> bool:
+        return any(c.complete_after_registered() for c in self.children)
 
     @lru_cache(CACHE_SIZE)
     def rank(self) -> Union[int, Decimal]:
@@ -245,7 +290,7 @@ class SingleClause(BaseClause, ResolvedClause):
         }
 
     @staticmethod
-    def load(key: str, value: Any, c: Constants, forbid: Sequence[Operator] = tuple()) -> 'SingleClause':
+    def load(key: str, value: Any, *, c: Constants, mode: ClauseMode, forbid: Sequence[Operator] = tuple()) -> 'SingleClause':
         assert isinstance(value, Dict), Exception(f'expected {value} to be a dictionary')
 
         operators = [k for k in value.keys() if k.startswith('$')]
@@ -293,6 +338,7 @@ class SingleClause(BaseClause, ResolvedClause):
             operator=operator,
             expected_verbatim=expected_verbatim,
             at_most=at_most,
+            mode=mode,
             label=value.get('label', None),
             treat_in_progress_as_pass=value.get('treat_in_progress_as_pass', False),
         )
@@ -305,8 +351,16 @@ class SingleClause(BaseClause, ResolvedClause):
         return self.result is ResultStatus.Pass
 
     @lru_cache(CACHE_SIZE)
-    def in_progress(self) -> bool:
-        return self.result is ResultStatus.InProgress
+    def complete_after_current_term(self) -> bool:
+        return self.result in (ResultStatus.Pass, ResultStatus.PendingCurrent)
+
+    @lru_cache(CACHE_SIZE)
+    def complete_after_registered(self) -> bool:
+        return self.result in (ResultStatus.Pass, ResultStatus.PendingCurrent, ResultStatus.PendingRegistered)
+
+    @lru_cache(CACHE_SIZE)
+    def partially_complete(self) -> bool:
+        return self.result in (ResultStatus.Pass, ResultStatus.PendingCurrent, ResultStatus.PendingRegistered, ResultStatus.Partial)
 
     @lru_cache(CACHE_SIZE)
     def rank(self) -> Union[int, Decimal]:
@@ -345,41 +399,101 @@ class SingleClause(BaseClause, ResolvedClause):
 
     @lru_cache(CACHE_SIZE)
     def compare_and_resolve_with(self, value: Tuple['Clausable', ...]) -> 'SingleClause':  # type: ignore
-        calculated_result = apply_clause_to_assertion(self, value)
+        op = self.operator
+        rhs = self.expected
 
-        reduced_value = calculated_result.value
+        courses_only_completed = False
+        courses_completed_ip = False
+        courses_completed_ip_reg = False
+
+        if self.mode is ClauseMode.Course:
+            all_input_courses = cast(Sequence['CourseInstance'], value)
+            input_courses = all_input_courses
+
+            # try once with only completed clbids
+            input_courses = [c for c in all_input_courses if c.is_completed]
+            calculated_result = apply_clause_to_assertion_with_courses(self, input_courses)
+            applied_result = apply_operator(lhs=calculated_result.value, op=op, rhs=rhs)
+
+            if applied_result:
+                courses_only_completed = True
+
+            # try once with completed and IP clbids
+            if not applied_result:
+                input_courses = [c for c in all_input_courses if c.is_completed or c.is_current]
+                calculated_result = apply_clause_to_assertion_with_courses(self, input_courses)
+                applied_result = apply_operator(lhs=calculated_result.value, op=op, rhs=rhs)
+
+                if applied_result:
+                    courses_completed_ip = True
+
+                # try once with all clbids
+                if not applied_result:
+                    courses_completed_ip_reg = True
+                    input_courses = all_input_courses
+                    calculated_result = apply_clause_to_assertion_with_courses(self, input_courses)
+                    applied_result = apply_operator(lhs=calculated_result.value, op=op, rhs=rhs)
+
+        elif self.mode is ClauseMode.Area:
+            input_areas = cast(Sequence['AreaPointer'], value)
+            calculated_result = apply_clause_to_assertion_with_areas(self, input_areas)
+            applied_result = apply_operator(lhs=calculated_result.value, op=op, rhs=rhs)
+
+        elif self.mode is ClauseMode.Other:
+            calculated_result = apply_clause_to_assertion_with_data(self, value)
+            applied_result = apply_operator(lhs=calculated_result.value, op=op, rhs=rhs)
+
+        # # if we have `treat_in_progress_as_pass` set, we skip the ip_clbids check entirely
+        # if ip_clbids and self.treat_in_progress_as_pass is False:
+        #     result = ResultStatus.InProgress
+        # elif apply_operator(lhs=reduced_value, op=self.operator, rhs=self.expected) is True:
+        #     result = ResultStatus.Pass
+        # elif clbids:
+        #     # we aren't "passing", but we've also got at least something
+        #     # counting towards this clause, so we'll mark it as in-progress.
+        #     result = ResultStatus.InProgress
+        # else:
+        #     result = ResultStatus.NotStarted
+
         value_items = calculated_result.data
         clbids = calculated_result.clbids()
         ip_clbids = calculated_result.ip_clbids()
+        future_clbids = calculated_result.future_clbids()
 
-        # if we have `treat_in_progress_as_pass` set, we skip the ip_clbids check entirely
-        if ip_clbids and self.treat_in_progress_as_pass is False:
-            result = ResultStatus.InProgress
-        elif apply_operator(lhs=reduced_value, op=self.operator, rhs=self.expected) is True:
+        if courses_only_completed and applied_result:
             result = ResultStatus.Pass
+        elif courses_completed_ip and ip_clbids:
+            result = ResultStatus.PendingCurrent
+        elif courses_completed_ip_reg and future_clbids:
+            result = ResultStatus.PendingRegistered
         elif clbids:
             # we aren't "passing", but we've also got at least something
             # counting towards this clause, so we'll mark it as in-progress.
-            result = ResultStatus.InProgress
+            result = ResultStatus.Partial
+        elif self.mode is not ClauseMode.Course and applied_result:
+            # handle non-course data
+            result = ResultStatus.Pass
         else:
-            result = ResultStatus.Pending
+            result = ResultStatus.NotStarted
 
         if self.operator in (Operator.LessThan, Operator.LessThanOrEqualTo)\
-                and result == ResultStatus.InProgress\
+                and result in (ResultStatus.PendingCurrent, ResultStatus.Partial)\
                 and apply_operator(lhs=reduced_value, op=self.operator, rhs=self.expected) is True:
             result = ResultStatus.Pass
 
         return SingleClause(
+            mode=self.mode,
             key=self.key,
             expected=self.expected,
             expected_verbatim=self.expected_verbatim,
             operator=self.operator,
             at_most=self.at_most,
             label=self.label,
-            resolved_with=reduced_value,
+            resolved_with=calculated_result.value,
             resolved_items=tuple(value_items),
             resolved_clbids=clbids,
             in_progress_clbids=ip_clbids,
+            future_clbids=future_clbids,
             result=result,
             treat_in_progress_as_pass=self.treat_in_progress_as_pass,
         )
@@ -517,7 +631,7 @@ def get_resolved_clbids(clause: Union[Dict[str, Any], 'Clause']) -> List[str]:
         return get_resolved_clbids(clause.to_dict())
 
     if clause["type"] == "single-clause":
-        return sorted(clause['resolved_clbids'])
+        return list(clause['resolved_clbids'])
     elif clause["type"] == "or-clause":
         return [clbid for c in clause["children"] for clbid in get_resolved_clbids(c)]
     elif clause["type"] == "and-clause":
@@ -536,6 +650,20 @@ def get_in_progress_clbids(clause: Union[Dict[str, Any], 'Clause']) -> Set[str]:
         return set(clbid for c in clause["children"] for clbid in get_in_progress_clbids(c))
     elif clause["type"] == "and-clause":
         return set(clbid for c in clause["children"] for clbid in get_in_progress_clbids(c))
+
+    raise Exception('not a clause')
+
+
+def get_future_clbids(clause: Union[Dict[str, Any], 'Clause']) -> Set[str]:
+    if not isinstance(clause, dict):
+        return get_future_clbids(clause.to_dict())
+
+    if clause["type"] == "single-clause":
+        return set(clause['future_clbids'])
+    elif clause["type"] == "or-clause":
+        return set(clbid for c in clause["children"] for clbid in get_future_clbids(c))
+    elif clause["type"] == "and-clause":
+        return set(clbid for c in clause["children"] for clbid in get_future_clbids(c))
 
     raise Exception('not a clause')
 

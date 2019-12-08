@@ -41,8 +41,14 @@ class BaseAssertionRule(Base):
 
         return self.assertion.ok()
 
-    def in_progress(self) -> bool:
-        return self.assertion.in_progress()
+    def partially_complete(self) -> bool:
+        return self.assertion.partially_complete()
+
+    def complete_after_current_term(self) -> bool:
+        return self.assertion.complete_after_current_term()
+
+    def complete_after_registered(self) -> bool:
+        return self.assertion.complete_after_registered()
 
     def override_expected_value(self, value: Decimal) -> 'BaseAssertionRule':
         clause = self.assertion.override_expected(value)

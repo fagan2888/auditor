@@ -141,4 +141,4 @@ class MusicProficiencies:
             'Guitar': self.guitar,
         }
 
-        return ResultStatus.Pass if matcher[of] else ResultStatus.Pending
+        return ResultStatus.Pass if matcher[of] else ResultStatus.NotStarted

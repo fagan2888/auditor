@@ -1,5 +1,5 @@
 import attr
-from typing import Dict, List, Optional, Sequence, Iterator, Callable, Collection, FrozenSet, Union, Tuple, cast, TYPE_CHECKING
+from typing import Dict, List, Optional, Sequence, Iterator, Iterable, Callable, Collection, FrozenSet, Union, Tuple, Any, cast, TYPE_CHECKING
 import itertools
 import logging
 import decimal
@@ -98,22 +98,22 @@ class QueryRule(Rule, BaseQueryRule):
     def get_required_courses(self, *, ctx: 'RequirementContext') -> Collection['CourseInstance']:
         return tuple()
 
-    def get_data(self, *, ctx: 'RequirementContext') -> Sequence[Clausable]:
+    def get_data(self, *, ctx: 'RequirementContext') -> Iterable[Clausable]:
         if self.source is QuerySource.Courses:
             all_courses = ctx.transcript()
-            return [c for c in all_courses if c.clbid not in self.excluded_clbids]
+            return (c for c in all_courses if c.clbid not in self.excluded_clbids)
 
         if self.source is QuerySource.Claimed:
             return []
 
         elif self.source is QuerySource.Areas:
-            return list(ctx.areas)
+            return ctx.student.areas
 
         elif self.source is QuerySource.MusicPerformances:
-            return list(ctx.music_performances)
+            return ctx.student.music_performances
 
         elif self.source is QuerySource.MusicAttendances:
-            return list(ctx.music_attendances)
+            return ctx.student.music_attendances
 
         else:
             raise TypeError(f'unknown type of data for query, {self.source}')
@@ -221,7 +221,7 @@ class QueryRule(Rule, BaseQueryRule):
             return True
 
         if self.where is None:
-            return len(self.get_data(ctx=ctx)) > 0
+            return has_items(self.get_data(ctx=ctx))
 
         return any(self.where.apply(item) for item in self.get_data(ctx=ctx))
 
@@ -247,6 +247,13 @@ class QueryRule(Rule, BaseQueryRule):
             return True
 
         return False
+
+
+def has_items(it: Iterable[Any]) -> bool:
+    for _ in it:
+        return True
+
+    return False
 
 
 def has_assertion(assertions: Sequence[Union[AssertionRule, ConditionalAssertionRule]], key: Callable[[SingleClause], Iterator[Clause]]) -> bool:

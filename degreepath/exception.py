@@ -1,5 +1,5 @@
 import attr
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Mapping
 import logging
 import enum
 from decimal import Decimal
@@ -50,7 +50,7 @@ class ValueException(RuleException):
         return {**super().to_dict(), "value": str(self.value)}
 
 
-def load_exception(data: Dict[str, Any]) -> RuleException:
+def load_exception(data: Mapping[str, Any]) -> RuleException:
     ex_type = ExceptionAction(data['type'])
     ex_path = tuple(data['path'])
 

@@ -1,13 +1,12 @@
 import attr
-from typing import Dict, List, Set, FrozenSet, Tuple, Optional, Sequence, Iterator, Iterable, Any, TYPE_CHECKING
+from typing import Dict, Mapping, List, Set, FrozenSet, Tuple, Optional, Iterator, Iterable, Any, TYPE_CHECKING
 import logging
 import decimal
 
 from .base import Solution, Result, Rule, Base, Summable
 from .constants import Constants
 from .context import RequirementContext
-from .data import CourseInstance, AreaPointer, AreaType, MusicPerformance, MusicAttendance, MusicProficiencies
-from .exception import RuleException, InsertionException
+from .data import CourseInstance, AreaPointer, AreaType, Student
 from .limit import LimitSet
 from .load_rule import load_rule
 from .result.count import CountResult
@@ -61,16 +60,13 @@ class AreaOfStudy(Base):
     @staticmethod
     def load(
         *,
-        specification: Dict,
-        c: Constants,
-        areas: Sequence[AreaPointer] = tuple(),
-        transcript: Sequence[CourseInstance] = tuple(),
-        exceptions: Sequence[RuleException] = tuple(),
+        specification: Mapping[str, Any],
+        student: Student,
         all_emphases: bool = False,
         emphasis_validity_check: bool = False,
     ) -> 'AreaOfStudy':
         this_code = specification.get('code', '<null>')
-        pointers = {p.code: p for p in areas}
+        pointers = {p.code: p for p in student.areas}
         this_pointer = pointers.get(this_code, None)
 
         emphases = specification.get('emphases', {})
@@ -78,19 +74,16 @@ class AreaOfStudy(Base):
         # this block just does validity checking on the emphases; we don't
         # actually use the result of loading these here.
         for e in emphases.values():
-            r = AreaOfStudy.load(specification=e, c=c, areas=[], transcript=transcript, emphasis_validity_check=True)
+            r = AreaOfStudy.load(specification=e, student=student, emphasis_validity_check=True)
             r.validate()
 
-        declared_emphasis_codes = set(str(a.code) for a in areas if a.kind is AreaType.Emphasis)
+        declared_emphasis_codes = set(str(a.code) for a in student.areas if a.kind is AreaType.Emphasis)
 
-        ctx = RequirementContext(
-            areas=tuple(areas),
-            exceptions=list(exceptions),
-        ).with_transcript(transcript)
+        ctx = RequirementContext(student=student)
 
         result = load_rule(
             data=specification["result"],
-            c=c,
+            c=student.constants,
             children=specification.get("requirements", {}),
             emphases=[
                 v for k, v in emphases.items()
@@ -111,7 +104,7 @@ class AreaOfStudy(Base):
             for crs in required_courses:
                 logger.debug(f'excluding {crs.clbid} {crs.identity_}')
 
-        limit = LimitSet.load(data=specification.get("limit", None), c=c)
+        limit = LimitSet.load(data=specification.get("limit", None), c=student.constants)
 
         multicountable_rules: Dict[str, List[Tuple[str, ...]]] = {
             course: [
@@ -140,7 +133,7 @@ class AreaOfStudy(Base):
             code=this_code,
             excluded_clbids=excluded_clbids,
             common_rules=tuple(prepare_common_rules(
-                other_areas=tuple(areas),
+                other_areas=student.areas,
                 dept_code=dept,
                 degree=degree,
                 area_code=this_code,
@@ -152,39 +145,16 @@ class AreaOfStudy(Base):
 
         self.result.validate(ctx=ctx)
 
-    def solutions(
-        self, *,
-        transcript: Sequence[CourseInstance],
-        transcript_with_failed: Sequence[CourseInstance] = tuple(),
-        areas: Sequence[AreaPointer],
-        music_performances: Sequence[MusicPerformance] = tuple(),
-        music_attendances: Sequence[MusicAttendance] = tuple(),
-        music_proficiencies: MusicProficiencies = MusicProficiencies(),
-        exceptions: List[RuleException],
-    ) -> Iterable['AreaSolution']:
+    def solutions(self, *, student: Student) -> Iterable['AreaSolution']:
         logger.debug("evaluating area.result")
 
-        forced_clbids = set(e.clbid for e in exceptions if isinstance(e, InsertionException) and e.forced is True)
-        forced_courses = {c.clbid: c for c in transcript if c.clbid in forced_clbids}
+        ctx = RequirementContext(student=student)
+        ctx.claims.multicountable = self.multicountable
 
-        ctx = RequirementContext(
-            areas=tuple(areas),
-            music_performances=tuple(music_performances),
-            music_attendances=tuple(music_attendances),
-            music_proficiencies=music_proficiencies,
-            exceptions=exceptions,
-            multicountable=self.multicountable,
-        )
-
-        for limited_transcript in self.limit.limited_transcripts(courses=transcript):
+        for limited_transcript in self.limit.limited_transcripts(courses=student.transcript.courses):
             logger.debug("%s evaluating area.result with limited transcript", limited_transcript)
 
-            ctx = ctx.with_transcript(
-                limited_transcript,
-                full=transcript,
-                forced=forced_courses,
-                including_failed=transcript_with_failed,
-            )
+            ctx = ctx.with_limited_transcript(limited_transcript)
 
             for sol in self.result.solutions(ctx=ctx, depth=1):
                 # be sure to start with an empty claims list - without
@@ -196,38 +166,14 @@ class AreaOfStudy(Base):
 
         logger.debug("all solutions generated")
 
-    def estimate(
-        self, *,
-        transcript: Sequence[CourseInstance],
-        transcript_with_failed: Sequence[CourseInstance] = tuple(),
-        areas: Sequence[AreaPointer],
-        music_performances: Sequence[MusicPerformance] = tuple(),
-        music_attendances: Sequence[MusicAttendance] = tuple(),
-        music_proficiencies: MusicProficiencies = MusicProficiencies(),
-        exceptions: List[RuleException],
-    ) -> int:
-        forced_clbids = set(e.clbid for e in exceptions if isinstance(e, InsertionException) and e.forced is True)
-        forced_courses = {c.clbid: c for c in transcript if c.clbid in forced_clbids}
-
-        ctx = RequirementContext(
-            areas=tuple(areas),
-            music_performances=tuple(music_performances),
-            music_attendances=tuple(music_attendances),
-            music_proficiencies=music_proficiencies,
-            exceptions=exceptions,
-            multicountable=self.multicountable,
-        )
+    def estimate(self, *, student: Student) -> int:
+        ctx = RequirementContext(student=student)
+        ctx.claims.multicountable = self.multicountable
 
         acc = 0
 
-        for limited_transcript in self.limit.limited_transcripts(courses=transcript):
-            ctx = ctx.with_transcript(
-                limited_transcript,
-                full=transcript,
-                forced=forced_courses,
-                including_failed=transcript_with_failed,
-            )
-
+        for limited_transcript in self.limit.limited_transcripts(courses=student.transcript.courses):
+            ctx = ctx.with_limited_transcript(limited_transcript)
             acc += self.result.estimate(ctx=ctx.with_empty_claims(), depth=1)
 
         return acc
@@ -274,8 +220,8 @@ class AreaSolution(AreaOfStudy):
         # unclaimed = list(set(self.context.transcript()) - claimed)
         # unclaimed_context = RequirementContext().with_transcript(unclaimed)
         fresh_context = attr.evolve(self.context)
-        whole_context = fresh_context.with_transcript(fresh_context.transcript_with_excluded())
-        claimed_context = fresh_context.with_transcript(claimed)
+        whole_context = fresh_context.with_limited_transcript(fresh_context.student.transcript.including_excluded())
+        claimed_context = fresh_context.with_limited_transcript(claimed)
 
         c_or_better = self.common_rules[0]
         s_u_credits = self.common_rules[1]
@@ -347,7 +293,7 @@ class AreaResult(AreaOfStudy, Result):
             return decimal.Decimal('0.00')
 
         if self.kind == 'degree':
-            courses = self.context.transcript_with_failed_
+            courses = list(self.context.student.transcript.gpa_items())
         else:
             courses = list(self.matched_for_gpa())
 

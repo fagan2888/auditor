@@ -1,5 +1,5 @@
 from degreepath.area import AreaOfStudy
-from degreepath.data import course_from_str
+from degreepath.data import course_from_str, Student
 from degreepath.constants import Constants
 import pytest  # type: ignore
 import io
@@ -11,6 +11,15 @@ c = Constants(matriculation_year=2000)
 
 def test_global_limits(caplog):
     caplog.set_level(logging.DEBUG)
+
+    bio_101 = course_from_str("BIO 101")
+    bio_201 = course_from_str("BIO 201")
+    bio_202 = course_from_str("BIO 202")
+    bio_301 = course_from_str("BIO 301")
+    bio_302 = course_from_str("BIO 302")
+    transcript = [bio_101, bio_201, bio_202, bio_301, bio_302]
+
+    s = Student.load({'courses': transcript})
 
     test_data = io.StringIO("""
         limit:
@@ -25,16 +34,9 @@ def test_global_limits(caplog):
           assert: {count(courses): {$gte: 1}}
     """)
 
-    area = AreaOfStudy.load(specification=yaml.load(stream=test_data, Loader=yaml.SafeLoader), c=c)
+    area = AreaOfStudy.load(specification=yaml.load(stream=test_data, Loader=yaml.SafeLoader), student=s)
 
-    bio_101 = course_from_str("BIO 101")
-    bio_201 = course_from_str("BIO 201")
-    bio_202 = course_from_str("BIO 202")
-    bio_301 = course_from_str("BIO 301")
-    bio_302 = course_from_str("BIO 302")
-    transcript = [bio_101, bio_201, bio_202, bio_301, bio_302]
-
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[]))
+    solutions = list(area.solutions(student=s))
     course_sets = set([frozenset(s.solution.output) for s in solutions])
 
     assert course_sets == set([
@@ -60,6 +62,12 @@ def test_global_limits(caplog):
 
 
 def test_limits_esth(caplog):
+    psych_241 = course_from_str("PSYCH 241", clbid="0")
+    stat_212 = course_from_str("STAT 212", clbid="1")
+    ap_stat = course_from_str("STAT 0", name="AP Statistics", course_type="AP", clbid="2")
+    transcript = [psych_241, stat_212, ap_stat]
+    s = Student.load({'courses': transcript})
+
     spec = """
     result:
       from: courses
@@ -72,14 +80,9 @@ def test_limits_esth(caplog):
       assert: {count(courses): {$gte: 2}}
     """
 
-    area = AreaOfStudy.load(specification=yaml.load(stream=spec, Loader=yaml.SafeLoader), c=c)
+    area = AreaOfStudy.load(specification=yaml.load(stream=spec, Loader=yaml.SafeLoader), student=s)
 
-    psych_241 = course_from_str("PSYCH 241", clbid="0")
-    stat_212 = course_from_str("STAT 212", clbid="1")
-    ap_stat = course_from_str("STAT 0", name="AP Statistics", course_type="AP", clbid="2")
-    transcript = [psych_241, stat_212, ap_stat]
-
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[]))
+    solutions = list(area.solutions(student=s))
     course_sets = [list(s.solution.output) for s in solutions]
 
     assert course_sets == [

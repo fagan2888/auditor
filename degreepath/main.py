@@ -2,16 +2,14 @@ import traceback
 import pathlib
 import sqlite3
 import json
-from typing import Iterator, List, Dict, Tuple, Any
+from typing import Iterator, List, Tuple
 
 import yaml
 import csv
 import sys
 import os
 
-from . import load_course, Constants, AreaPointer, load_exception, AreaOfStudy
-from .lib import grade_point_average_items, grade_point_average
-from .data import GradeOption, GradeCode, CourseInstance, TranscriptCode, MusicPerformance, MusicAttendance, MusicProficiencies
+from . import AreaOfStudy, Student
 from .audit import audit, NoStudentsMsg, AuditStartMsg, ExceptionMsg, AreaFileNotFoundMsg, Message, Arguments
 
 
@@ -59,98 +57,44 @@ def run(args: Arguments) -> Iterator[Message]:  # noqa: C901
             yield AreaFileNotFoundMsg(area_file=f"{os.path.dirname(area_file)}/{os.path.basename(area_file)}", stnums=[s['stnum'] for s in file_data])
             return
 
-    for student in file_data:
-        area_pointers = tuple(AreaPointer.from_dict(a) for a in student['areas'])
-        constants = Constants(matriculation_year=0 if student['matriculation'] == '' else int(student['matriculation']))
-        transcript = tuple(sorted(load_transcript(student['courses']), key=lambda course: course.sort_order()))
-        transcript_with_failed = tuple(sorted(load_transcript(student['courses'], include_failed=True), key=lambda course: course.sort_order()))
+    for raw_student in file_data:
+        stnum = raw_student['stnum']
 
         if args.transcript_only:
+            student = Student.load(raw_student, for_area_code=None)
             writer = csv.writer(sys.stdout)
             writer.writerow(['course', 'name', 'clbid', 'type', 'credits', 'term', 'type', 'grade', 'in_gpa'])
-            for c in transcript:
+
+            for c in student.transcript.courses:
                 writer.writerow([
                     c.course(), c.name, c.clbid, c.course_type.value, str(c.credits), f"{c.year}-{c.term}",
                     c.sub_type.name, c.grade_code.value, 'Y' if c.is_in_gpa else 'N',
                 ])
+
             return
 
         if args.gpa_only:
+            student = Student.load(raw_student, for_area_code=None)
             writer = csv.writer(sys.stdout)
             writer.writerow(['course', 'grade', 'points'])
 
-            applicable = sorted(grade_point_average_items(transcript_with_failed), key=lambda c: (c.year, c.term, c.course(), c.clbid))
+            applicable = sorted(student.transcript.gpa_items(), key=lambda c: (c.year, c.term, c.course(), c.clbid))
             for c in applicable:
                 writer.writerow([c.course(), c.grade_code.value, str(c.grade_points)])
 
-            writer.writerow(['---', 'gpa:', str(grade_point_average(transcript_with_failed))])
+            writer.writerow(['---', 'gpa:', str(student.transcript.gpa())])
             return
-
-        music_performances = tuple(sorted((MusicPerformance.from_dict(d) for d in student['performances']), key=lambda p: p.sort_order()))
-        music_attendances = tuple(sorted((MusicAttendance.from_dict(d) for d in student['performance_attendances']), key=lambda a: a.sort_order()))
-        music_proficiencies = MusicProficiencies.from_dict(student['proficiencies'])
 
         for area_spec, area_catalog in area_specs:
             area_code = area_spec['code']
 
-            exceptions = [
-                load_exception(e)
-                for e in student.get("exceptions", [])
-                if e['area_code'] == area_code
-            ]
+            student = Student.load(raw_student, for_area_code=area_code)
 
-            area = AreaOfStudy.load(
-                specification=area_spec,
-                c=constants,
-                areas=area_pointers,
-                transcript=transcript,
-                exceptions=exceptions,
-            )
+            area = AreaOfStudy.load(specification=area_spec, student=student)
             area.validate()
 
-            yield AuditStartMsg(stnum=student['stnum'], area_code=area_code, area_catalog=area_catalog, student=student)
-
             try:
-                yield from audit(
-                    area=area,
-                    music_performances=music_performances,
-                    music_attendances=music_attendances,
-                    music_proficiencies=music_proficiencies,
-                    exceptions=exceptions,
-                    transcript=transcript,
-                    transcript_with_failed=transcript_with_failed,
-                    constants=constants,
-                    area_pointers=area_pointers,
-                    args=args,
-                )
-
+                yield AuditStartMsg(stnum=stnum, area_code=area_code, area_catalog=area_catalog, student=raw_student)
+                yield from audit(args=args, area=area, student=student)
             except Exception as ex:
-                yield ExceptionMsg(ex=ex, tb=traceback.format_exc(), stnum=student['stnum'], area_code=area_code)
-
-
-def load_transcript(courses: List[Dict[str, Any]], *, include_failed: bool = False) -> Iterator[CourseInstance]:
-    # We need to leave repeated courses in the transcript, because some majors
-    # (THEAT) require repeated courses for completion (and others )
-    for row in courses:
-        c = load_course(row)
-
-        # excluded Audited courses
-        if c.grade_option is GradeOption.Audit:
-            continue
-
-        # excluded repeated courses
-        if c.transcript_code in (TranscriptCode.RepeatedLater, TranscriptCode.RepeatInProgress):
-            continue
-
-        # exclude [N]o-Pass, [U]nsuccessful, [AU]dit, [UA]nsuccessfulAudit, [WF]ithdrawnFail, [WP]ithdrawnPass, and [Withdrawn]
-        if c.grade_code in (GradeCode._N, GradeCode._U, GradeCode._AU, GradeCode._UA, GradeCode._WF, GradeCode._WP, GradeCode._W):
-            continue
-
-        # exclude courses at grade F
-        if c.grade_code is GradeCode.F:
-            if include_failed is True:
-                pass
-            else:
-                continue
-
-        yield c
+                yield ExceptionMsg(ex=ex, tb=traceback.format_exc(), stnum=stnum, area_code=area_code)

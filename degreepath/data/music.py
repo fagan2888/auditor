@@ -125,11 +125,11 @@ class MusicProficiencies:
     @staticmethod
     def from_dict(data: Dict) -> 'MusicProficiencies':
         return MusicProficiencies(
-            guitar=data['guitar'],
-            keyboard_1=data['keyboard_1'],
-            keyboard_2=data['keyboard_2'],
-            keyboard_3=data['keyboard_3'],
-            keyboard_4=data['keyboard_4'],
+            guitar=data.get('guitar', False),
+            keyboard_1=data.get('keyboard_1', False),
+            keyboard_2=data.get('keyboard_2', False),
+            keyboard_3=data.get('keyboard_3', False),
+            keyboard_4=data.get('keyboard_4', False),
         )
 
     def status(self, *, of: str) -> ResultStatus:

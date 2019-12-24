@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Dict, Any, Iterable, Callable, TYPE_CHECKING
+from typing import Optional, Tuple, Mapping, Dict, Any, Union, Iterable, Callable, TYPE_CHECKING
 import attr
 from decimal import Decimal, ROUND_DOWN
 import logging
@@ -252,7 +252,10 @@ clause_application_lookup: Dict[str, Callable[[CourseInstance, 'SingleClause'], 
 }
 
 
-def load_course(data: Dict[str, Any]) -> CourseInstance:  # noqa: C901
+def load_course(data: Union[Mapping, 'CourseInstance']) -> CourseInstance:  # noqa: C901
+    if isinstance(data, CourseInstance):
+        return data
+
     attributes = data.get('attributes', tuple())
     clbid = data['clbid']
     course_type = data['course_type']

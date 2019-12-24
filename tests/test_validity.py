@@ -1,10 +1,10 @@
 from degreepath.area import AreaOfStudy
-from degreepath.constants import Constants
+from degreepath.data import Student
 import pytest
 import io
 import yaml
 
-c = Constants(matriculation_year=2000)
+s = Student()
 
 
 def test_load():
@@ -35,7 +35,7 @@ def test_load():
     """
     )
 
-    area = AreaOfStudy.load(specification=yaml.load(stream=test_data, Loader=yaml.SafeLoader), c=c)
+    area = AreaOfStudy.load(specification=yaml.load(stream=test_data, Loader=yaml.SafeLoader), student=s)
     area.validate()
 
 
@@ -63,5 +63,5 @@ def test_invalid():
         """
         )
 
-        area = AreaOfStudy.load(specification=yaml.load(stream=test_data, Loader=yaml.SafeLoader), c=c)
+        area = AreaOfStudy.load(specification=yaml.load(stream=test_data, Loader=yaml.SafeLoader), student=s)
         area.validate()

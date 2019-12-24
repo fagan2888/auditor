@@ -6,7 +6,7 @@ import argparse
 
 import yaml
 
-from degreepath import AreaOfStudy, Constants
+from degreepath import AreaOfStudy, Student
 from degreepath.base import Rule
 from degreepath.rule.course import CourseRule
 from degreepath.rule.count import CountRule
@@ -34,7 +34,7 @@ def main() -> None:
         with open(file, "r", encoding="utf-8") as infile:
             area_spec = yaml.load(stream=infile, Loader=yaml.SafeLoader)
 
-        area = AreaOfStudy.load(specification=area_spec, c=Constants(), all_emphases=True)
+        area = AreaOfStudy.load(specification=area_spec, student=Student(), all_emphases=True)
 
         for course in find_courses_in_rule(area.result):
             pairs.add((code, course))

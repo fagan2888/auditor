@@ -453,7 +453,7 @@ def compute_single_clause_diff(conditionals: Mapping[str, str], *, ctx: Optional
 
                 proficiency = condition.split('(')[1].rstrip(')').strip()
 
-                if ctx.music_proficiencies.status(of=proficiency) is not ResultStatus.Pass:
+                if ctx.student.music_proficiencies.status(of=proficiency) is not ResultStatus.Pass:
                     condition_results = False
 
             else:

@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, Any, Optional, Tuple, Union, TYPE_CHECKING
 import attr
 import logging
 import decimal
@@ -46,7 +46,10 @@ class AreaPointer(Clausable):
         }
 
     @staticmethod
-    def from_dict(data: Dict) -> 'AreaPointer':
+    def from_dict(data: Union[Dict, 'AreaPointer']) -> 'AreaPointer':
+        if isinstance(data, AreaPointer):
+            return data
+
         return AreaPointer(
             code=data['code'],
             status=AreaStatus(data['status']),

@@ -1,4 +1,5 @@
-from typing import Optional, Dict, List, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
+from .data.claims import CourseClaims
 
 if TYPE_CHECKING:  # pragma: no cover
     from .claim import Claim  # noqa: F401
@@ -9,7 +10,7 @@ if TYPE_CHECKING:  # pragma: no cover
 def find_best_solution(*, rule: 'Rule', ctx: 'RequirementContext', merge_claims: bool = False) -> Optional['Result']:
     result: Optional['Result'] = None
 
-    claims: Dict[str, List['Claim']] = dict()
+    claims: CourseClaims = CourseClaims()
     if merge_claims:
         claims = ctx.claims
 
@@ -29,6 +30,6 @@ def find_best_solution(*, rule: 'Rule', ctx: 'RequirementContext', merge_claims:
                 break
 
     if merge_claims and inner_ctx:
-        ctx.set_claims({**claims, **inner_ctx.claims})
+        ctx.merge_claims(claims, inner_ctx.claims)
 
     return result

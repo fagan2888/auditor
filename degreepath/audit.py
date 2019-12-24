@@ -5,10 +5,9 @@ from decimal import Decimal
 import time
 
 from .constants import Constants
-from .exception import RuleException
 from .area import AreaOfStudy, AreaResult
 from .ms import pretty_ms
-from .data import CourseInstance, AreaPointer, MusicAttendance, MusicPerformance, MusicProficiencies
+from .data import CourseInstance, Student
 
 
 @attr.s(slots=True, kw_only=True, auto_attribs=True)
@@ -100,15 +99,8 @@ Message = Union[
 def audit(
     *,
     area: AreaOfStudy,
-    area_pointers: Sequence[AreaPointer] = tuple(),
     args: Arguments = Arguments(),
-    constants: Constants,
-    exceptions: Sequence[RuleException] = tuple(),
-    music_attendances: Tuple[MusicAttendance, ...] = tuple(),
-    music_performances: Tuple[MusicPerformance, ...] = tuple(),
-    music_proficiencies: MusicProficiencies = MusicProficiencies(),
-    transcript: Tuple[CourseInstance, ...] = tuple(),
-    transcript_with_failed: Tuple[CourseInstance, ...] = tuple(),
+    student: Student,
 ) -> Iterator[Message]:  # noqa: C901
     best_sol: Optional[AreaResult] = None
     best_rank: Union[int, Decimal] = 0
@@ -119,31 +111,15 @@ def audit(
     iter_start = time.perf_counter()
     startup_time = 0.00
 
-    estimate = area.estimate(
-        transcript=transcript,
-        areas=tuple(area_pointers),
-        music_performances=music_performances,
-        music_attendances=music_attendances,
-        music_proficiencies=music_proficiencies,
-        exceptions=list(exceptions),
-        transcript_with_failed=transcript_with_failed,
-    )
+    estimate = area.estimate(student=student)
     yield EstimateMsg(estimate=estimate)
 
     if args.estimate_only:
         return
 
-    potentials_for_all_clauses = find_potentials(area, constants)
+    potentials_for_all_clauses = find_potentials(area, student.constants)
 
-    for sol in area.solutions(
-        transcript=transcript,
-        areas=tuple(area_pointers),
-        music_performances=music_performances,
-        music_attendances=music_attendances,
-        music_proficiencies=music_proficiencies,
-        exceptions=list(exceptions),
-        transcript_with_failed=transcript_with_failed,
-    ):
+    for sol in area.solutions(student=student):
         if total_count == 0:
             iter_start = time.perf_counter()
             startup_time = time.perf_counter() - iter_start
@@ -164,7 +140,7 @@ def audit(
         if args.print_all:
             yield ResultMsg(
                 result=result,
-                transcript=transcript,
+                transcript=student.transcript.courses,
                 count=total_count,
                 elapsed='∞',
                 elapsed_ms=0,
@@ -201,7 +177,7 @@ def audit(
 
     yield ResultMsg(
         result=best_sol,
-        transcript=transcript,
+        transcript=student.transcript.courses,
         count=total_count,
         elapsed=elapsed,
         elapsed_ms=elapsed_ms,

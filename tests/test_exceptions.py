@@ -1,4 +1,4 @@
-from degreepath.data import course_from_str
+from degreepath.data import course_from_str, Student
 from degreepath.area import AreaOfStudy
 from degreepath.constants import Constants
 from degreepath.result.course import CourseResult
@@ -21,8 +21,10 @@ def test_insertion_on_course_rule(caplog):
     course_b = course_from_str("OTHER 234", clbid="1")
     transcript = [course_a, course_b]
 
-    area = AreaOfStudy.load(specification={"result": {"course": "DEPT 345"}}, c=c, transcript=transcript, exceptions=[exception])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception]))
+    student = Student.load({'courses': transcript}, ex=[exception])
+
+    area = AreaOfStudy.load(specification={"result": {"course": "DEPT 345"}}, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -52,8 +54,10 @@ def test_multi_insertion_on_course_rule(caplog):
     course_c = course_from_str("OTHER 235", clbid="1")
     transcript = [course_a, course_b, course_c]
 
-    area = AreaOfStudy.load(specification={"result": {"course": "DEPT 345"}}, c=c, transcript=transcript, exceptions=[exception, exception2])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception, exception2]))
+    student = Student.load({'courses': transcript}, ex=[exception, exception2])
+
+    area = AreaOfStudy.load(specification={"result": {"course": "DEPT 345"}}, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -76,14 +80,16 @@ def test_insertion_on_query_rule(caplog):
     course_a = course_from_str("OTHER 123", clbid="0")
     transcript = [course_a]
 
+    student = Student.load({'courses': transcript}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "from": "courses",
             "where": {"subject": {"$eq": "ABC"}},
             "assert": {"count(courses)": {"$gte": 1}},
         },
-    }, c=c, transcript=transcript, exceptions=[exception])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -111,14 +117,16 @@ def test_multi_insertion_on_query_rule(caplog):
     course_b = course_from_str("OTHER 111", clbid="1")
     transcript = [course_a, course_b]
 
+    student = Student.load({'courses': transcript}, ex=[exception, exception2])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "from": "courses",
             "where": {"subject": {"$eq": "ABC"}},
             "assert": {"count(courses)": {"$gte": 1}},
         },
-    }, c=c, transcript=transcript, exceptions=[exception, exception2])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception, exception2]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 3
 
     result = solutions[0].audit()
@@ -142,14 +150,16 @@ def test_insertion_on_count_rule__any(caplog):
     course_b = course_from_str("OTHER 234", clbid="1")
     transcript = [course_a, course_b]
 
+    student = Student.load({'courses': transcript}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "any": [
                 {"course": "DEPT 123"},
             ],
         },
-    }, c=c, transcript=transcript, exceptions=[exception])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     print([s.solution for s in solutions])
 
     assert [
@@ -185,14 +195,16 @@ def test_multi_insertion_on_count_rule__any(caplog):
     course_c = course_from_str("OTHER 222", clbid="2")
     transcript = [course_a, course_b, course_c]
 
+    student = Student.load({'courses': transcript}, ex=[exception, exception2])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "any": [
                 {"course": "DEPT 123"},
             ],
         },
-    }, c=c, transcript=transcript, exceptions=[exception, exception2])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception, exception2]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     print([s.solution for s in solutions])
 
     assert [
@@ -229,14 +241,16 @@ def test_multi_insertion_on_count_rule__any_with_natural(caplog):
     course_c = course_from_str("OTHER 222", clbid="2")
     transcript = [course_a, course_b, course_c]
 
+    student = Student.load({'courses': transcript}, ex=[exception, exception2])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "any": [
                 {"course": "DEPT 123"},
             ],
         },
-    }, c=c, transcript=transcript, exceptions=[exception, exception2])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception, exception2]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     print([s.solution for s in solutions])
 
     assert [
@@ -269,6 +283,8 @@ def test_insertion_on_count_rule__all(caplog):
     course_c = course_from_str("DEPT 345", clbid="2")
     transcript = [course_a, course_b, course_c]
 
+    student = Student.load({'courses': transcript}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "all": [
@@ -276,8 +292,8 @@ def test_insertion_on_count_rule__all(caplog):
                 {"course": "DEPT 234"},
             ],
         },
-    }, c=c, transcript=transcript, exceptions=[exception])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -301,13 +317,15 @@ def test_insertion_on_requirement_rule(caplog):
 
     print('start')
 
+    student = Student.load({'courses': []}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {"requirement": "req"},
         "requirements": {
             "req": {"result": {"course": "DEPT 123"}},
         },
-    }, c=c, transcript=[], exceptions=[exception])
-    solutions = list(area.solutions(transcript=[], areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     print('begin audit')
@@ -329,8 +347,10 @@ def test_override_on_course_rule(caplog):
         "status": "pass",
     })
 
-    area = AreaOfStudy.load(specification={"result": {"course": "DEPT 123"}}, c=c, transcript=[], exceptions=[exception])
-    solutions = list(area.solutions(transcript=[], areas=[], exceptions=[exception]))
+    student = Student.load({'courses': []}, ex=[exception])
+
+    area = AreaOfStudy.load(specification={"result": {"course": "DEPT 123"}}, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -348,13 +368,15 @@ def test_override_on_query_rule(caplog):
         "status": "pass",
     })
 
+    student = Student.load({'courses': []}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "from": "courses",
             "assert": {"count(courses)": {"$gte": 1}},
         },
-    }, c=c, transcript=[], exceptions=[exception])
-    solutions = list(area.solutions(transcript=[], areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -372,14 +394,16 @@ def test_override_on_count_rule(caplog):
         "status": "pass",
     })
 
+    student = Student.load({'courses': []}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "any": [
                 {"course": "DEPT 123"},
             ],
         },
-    }, c=c, transcript=[], exceptions=[exception])
-    solutions = list(area.solutions(transcript=[], areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -397,13 +421,15 @@ def test_override_on_requirement_rule(caplog):
         "status": "pass",
     })
 
+    student = Student.load({'courses': []}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {"requirement": "req"},
         "requirements": {
             "req": {"department_audited": True},
         },
-    }, c=c, transcript=[], exceptions=[exception])
-    solutions = list(area.solutions(transcript=[], areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -425,13 +451,15 @@ def test_override_on_count_rule_assertion_clause(caplog):
     course_b = course_from_str("DEPT 345", clbid="1")
     transcript = [course_a, course_b]
 
+    student = Student.load({'courses': transcript}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "all": [{"course": "DEPT 123"}],
             "audit": {"assert": {"count(courses)": {"$gte": 1}}},
         },
-    }, c=c, transcript=transcript, exceptions=[exception])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -454,13 +482,15 @@ def test_insertion_on_count_rule_assertion_clause(caplog):
     course_b = course_from_str("DEPT 345", clbid="1")
     transcript = [course_a, course_b]
 
+    student = Student.load({'courses': transcript}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "all": [{"course": "DEPT 123"}],
             "audit": {"assert": {"count(courses)": {"$gte": 1}}},
         },
-    }, c=c, transcript=transcript, exceptions=[exception])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -493,13 +523,15 @@ def test_multi_insertion_on_count_rule_assertion_clause(caplog):
     course_c = course_from_str("DEPT 234", clbid="2")
     transcript = [course_a, course_b, course_c]
 
+    student = Student.load({'courses': transcript}, ex=[exception, exception2])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "all": [{"course": "DEPT 123"}],
             "audit": {"assert": {"count(courses)": {"$gte": 1}}},
         },
-    }, c=c, transcript=transcript, exceptions=[exception, exception2])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception, exception2]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -522,13 +554,15 @@ def test_override_on_query_rule_audit_clause(caplog):
         "status": "pass",
     })
 
+    student = Student.load({'courses': []}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "from": "courses",
             "all": [{"assert": {"count(courses)": {"$gte": 1}}}],
         },
-    }, c=c, exceptions=[exception])
-    solutions = list(area.solutions(transcript=[], areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -551,13 +585,15 @@ def test_insertion_on_query_rule_audit_clause(caplog):
     course_b = course_from_str("DEPT 345", clbid="1")
     transcript = [course_a, course_b]
 
+    student = Student.load({'courses': transcript}, ex=[exception])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "from": "courses",
             "all": [{"assert": {"count(courses)": {"$gte": 1}}}],
         },
-    }, c=c, transcript=transcript, exceptions=[exception])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 3
 
     result = solutions[0].audit()
@@ -593,13 +629,15 @@ def test_multi_insertion_on_query_rule_audit_clause(caplog):
     course_c = course_from_str("DEPT 234", clbid="2")
     transcript = [course_a, course_b, course_c]
 
+    student = Student.load({'courses': transcript}, ex=[exception, exception2])
+
     area = AreaOfStudy.load(specification={
         "result": {
             "from": "courses",
             "all": [{"assert": {"count(courses)": {"$gte": 1}}}],
         },
-    }, c=c, transcript=transcript, exceptions=[exception, exception2])
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[exception, exception2]))
+    }, student=student)
+    solutions = list(area.solutions(student=student))
     assert len(solutions) == 7
 
     result = solutions[0].audit()

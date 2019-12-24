@@ -6,7 +6,7 @@ import argparse
 
 import yaml
 
-from degreepath import AreaOfStudy, Constants
+from degreepath import AreaOfStudy, Student
 from degreepath.base import Rule
 from degreepath.clause import AndClause, OrClause, Clause
 from degreepath.rule.query import QueryRule
@@ -38,7 +38,7 @@ def main() -> None:
         with open(file, "r", encoding="utf-8") as infile:
             area_spec = yaml.load(stream=infile, Loader=yaml.SafeLoader)
 
-        area = AreaOfStudy.load(specification=area_spec, c=Constants(), all_emphases=True)
+        area = AreaOfStudy.load(specification=area_spec, student=Student(), all_emphases=True)
 
         for limit in area.limit.limits:
             for bucket in find_buckets_in_clause(limit.where):

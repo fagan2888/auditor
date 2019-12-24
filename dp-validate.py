@@ -4,7 +4,7 @@ import argparse
 import yaml
 import sys
 import os
-from degreepath import AreaOfStudy, Constants
+from degreepath import AreaOfStudy, Student
 
 
 def main() -> int:
@@ -35,8 +35,7 @@ def one(f: str, break_on_err: bool) -> None:
     with open(f, "r", encoding="utf-8") as infile:
         area_def = yaml.load(stream=infile, Loader=yaml.SafeLoader)
 
-    c = Constants(matriculation_year=200)
-    area = AreaOfStudy.load(specification=area_def, c=c)
+    area = AreaOfStudy.load(specification=area_def, student=Student())
     area.validate()
 
 

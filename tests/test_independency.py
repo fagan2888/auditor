@@ -1,18 +1,14 @@
-from degreepath.data import course_from_str
+from degreepath.data import course_from_str, Student
 from degreepath.area import AreaOfStudy
-from degreepath.constants import Constants
 from degreepath.context import RequirementContext
 from typing import Any
-import logging
-
-c = Constants(matriculation_year=2000)
 
 
 def test_overlaps(caplog: Any) -> None:
-    # caplog.set_level(logging.DEBUG)
-    global c
+    transcript = [course_from_str(c) for c in ["MUSIC 212", "MUSIC 214", "MUSIC 301", "MUSIC 302"]]
+    s = Student.load({'courses': transcript})
 
-    area = AreaOfStudy.load(c=c, specification={
+    area = AreaOfStudy.load(student=s, specification={
         "result": {"all": [
             {"requirement": "Core"},
             {"requirement": "Electives"},
@@ -41,12 +37,11 @@ def test_overlaps(caplog: Any) -> None:
         },
     })
 
-    transcript = [course_from_str(c) for c in ["MUSIC 212", "MUSIC 214", "MUSIC 301", "MUSIC 302"]]
-    ctx = RequirementContext().with_transcript(transcript)
+    ctx = RequirementContext(student=s)
 
     area.result.find_independent_children(items=area.result.items, ctx=ctx)
 
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[]))
+    solutions = list(area.solutions(student=s))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
@@ -55,9 +50,15 @@ def test_overlaps(caplog: Any) -> None:
 
 
 def x_test_overlaps(caplog: Any) -> None:
-    # caplog.set_level(logging.DEBUG)
+    transcript = [course_from_str(c) for c in [
+        "MUSIC 212", "MUSIC 214", "MUSIC 237", "MUSIC 251", "MUSIC 252", "MUSIC 298",
+        "MUSIC 222", "MUSIC 224", "MUSIC 247", "MUSIC 261", "MUSIC 262", "MUSIC 299", "MUSIC 301", "MUSIC 302",
+        "MUSPF 101", "MUSPF 102", "MUSPF 103", "MUSPF 104", "MUSPF 105", "MUSPF 106",
+    ]]
 
-    area = AreaOfStudy.load(c=c, specification={
+    s = Student.load({'courses': transcript})
+
+    area = AreaOfStudy.load(student=s, specification={
         "result": {"all": [
             {"requirement": "Core"},
             {"requirement": "Electives"},
@@ -109,13 +110,7 @@ def x_test_overlaps(caplog: Any) -> None:
         },
     })
 
-    transcript = [course_from_str(c) for c in [
-        "MUSIC 212", "MUSIC 214", "MUSIC 237", "MUSIC 251", "MUSIC 252", "MUSIC 298",
-        "MUSIC 222", "MUSIC 224", "MUSIC 247", "MUSIC 261", "MUSIC 262", "MUSIC 299", "MUSIC 301", "MUSIC 302",
-        "MUSPF 101", "MUSPF 102", "MUSPF 103", "MUSPF 104", "MUSPF 105", "MUSPF 106",
-    ]]
-
-    solutions = list(area.solutions(transcript=transcript, areas=[], exceptions=[]))
+    solutions = list(area.solutions(student=s))
     assert len(solutions) == 1
 
     result = solutions[0].audit()
